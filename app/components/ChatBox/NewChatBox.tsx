@@ -31,7 +31,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
     }
 
     eventSourceRef.current = new EventSource(
-      `${BACKEND_BASE_URL_LOCAL}/transcribe`
+      `${BACKEND_BASE_URL_LIVE}/transcribe`
     );
 
     eventSourceRef.current.onmessage = (event) => {
@@ -79,7 +79,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
     console.log("Sending transcript to backend:", transcript);
     try {
       const res = await axios.post(
-        `${BACKEND_BASE_URL_LOCAL}/transcribe`,
+        `${BACKEND_BASE_URL_LIVE}/transcribe`,
         formData,
         {
           headers: {
