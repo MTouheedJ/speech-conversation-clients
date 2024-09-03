@@ -12,18 +12,20 @@ type ChatMessage = {
   text: string;
 };
 
-const BACKEND_BASE_URL_LOCAL = "http://localhost:3001";
-const BACKEND_BASE_URL_LIVE = "https://mendel.mindrind.live";
+const BACKEND_BASE_URL_LOCAL = "https://mendel.mindrind.live";
+// "http://localhost:5005"
+// "https://mendel.mindrind.live";
 
 interface NewChatBoxProps {}
 
 const NewChatBox: FC<NewChatBoxProps> = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [temporaryTextArray, setTemporaryTextArray] = useState<string[]>([]);
   const [stopTypingAnimation, setStopTypingAnimation] =
     useState<boolean>(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null); // Reference for audio element
-  const eventSourceRef = useRef<EventSource | null>(null); // Reference for EventSource
-  const isRecordingRef = useRef<boolean>(false); // Track recording state
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const isRecordingRef = useRef<boolean>(false);
 
   const startStream = () => {
     if (eventSourceRef.current) {
@@ -31,7 +33,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
     }
 
     eventSourceRef.current = new EventSource(
-      `${BACKEND_BASE_URL_LIVE}/transcribe`
+      `${BACKEND_BASE_URL_LOCAL}/transcribe`
     );
 
     eventSourceRef.current.onmessage = (event) => {
@@ -40,14 +42,32 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
       if (data.type !== "end") {
         console.log(data);
 
-        const cleanedText = data.text.replace("[write]:", "").trim(); // Clean the text
+        const cleanedText = data.text.trim(); // Clean the text
 
         if (data.type === "text") {
-          setStopTypingAnimation(false); // Reset stopTypingAnimation when new text is added
-          setChatMessages((prevMessages) => [
-            ...prevMessages,
-            { type: data.type, text: cleanedText }, // Use cleaned text here
-          ]);
+          setStopTypingAnimation(false);
+
+          setTemporaryTextArray((prevArray) => {
+            const updatedArray = [...prevArray, cleanedText];
+            setChatMessages((prevMessages) => {
+              // Check if the last message is a text type message
+              const lastMessage = prevMessages[prevMessages.length - 1];
+              if (lastMessage?.type === "text") {
+                // Update the last message with the concatenated text
+                return [
+                  ...prevMessages.slice(0, -1),
+                  { type: lastMessage.type, text: updatedArray.join("\n") },
+                ];
+              } else {
+                // Add a new message if the last message is not a text type
+                return [
+                  ...prevMessages,
+                  { type: data.type, text: updatedArray.join("\n") },
+                ];
+              }
+            });
+            return updatedArray;
+          });
         } else if (data.type === "audio") {
           const audioBlob = new Blob(
             [Uint8Array.from(atob(data.text), (c) => c.charCodeAt(0))],
@@ -79,7 +99,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
     console.log("Sending transcript to backend:", transcript);
     try {
       const res = await axios.post(
-        `${BACKEND_BASE_URL_LIVE}/transcribe`,
+        `${BACKEND_BASE_URL_LOCAL}/transcribe`,
         formData,
         {
           headers: {
@@ -89,7 +109,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
       );
 
       if (res.data.audio) {
-        playAudio(res.data.audio); // Play audio if available in response
+        playAudio(res.data.audio);
       }
 
       startStream();
@@ -118,12 +138,11 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
       console.log("here");
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
-      // return
     }
   };
 
   const stopTyping = () => {
-    setStopTypingAnimation(true); // Stop the typing animation
+    setStopTypingAnimation(true);
   };
 
   const { transcript, resetTranscript, browserSupportsSpeechRecognition } =
@@ -134,8 +153,9 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
   }
 
   const startListening = () => {
-    stopAudio(); // Stop any playing audio before starting a new transcription
-    stopTyping(); // Stop any ongoing typing animation
+    stopAudio();
+    stopTyping();
+    setTemporaryTextArray([]); // Clear the temporary text array when starting a new input
     SpeechRecognition.startListening({
       continuous: true,
       interimResults: true,
@@ -147,20 +167,17 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
     SpeechRecognition.stopListening();
     isRecordingRef.current = false;
 
-    // Delay processing by 2 seconds to capture the final transcript
     setTimeout(() => {
       const finalTranscript = transcript.trim();
       if (finalTranscript) {
-        // Immediately add the transcript to chat messages
         setChatMessages((prevMessages) => [
           ...prevMessages,
-          { type: "transcript", text: finalTranscript }, // Add final transcript to chat messages
+          { type: "transcript", text: finalTranscript },
         ]);
-        // Send the data to the backend
         sendData(finalTranscript);
       }
-      resetTranscript(); // Reset the transcript for the next session
-    }, 2000); // 2 seconds delay
+      resetTranscript();
+    }, 1000);
   };
 
   return (
@@ -170,9 +187,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
           {transcript}
         </div>
         <div className="w-[70%] mx-auto border border-gray-600 rounded-xl flex flex-col justify-between h-[450px]">
-          {/* Display real-time transcript */}
           <div className="flex flex-col gap-2 p-3 overflow-y-auto">
-            {/* Display chat messages */}
             {chatMessages.map((message, index) => (
               <div key={index}>
                 {message.type === "text" ? (
@@ -194,15 +209,14 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
           <div className="border-t border-gray-600 p-3 flex justify-center text-4xl text-gray-400">
             <div
               onMouseDown={startListening}
-              onMouseUp={stopListening} // Use stopListening on mouse up
+              onMouseUp={stopListening}
               className="cursor-pointer"
             >
               <FaMicrophone />
             </div>
           </div>
         </div>
-        <audio ref={audioRef} />{" "}
-        {/* Audio element to play the received audio */}
+        <audio ref={audioRef} />
       </div>
     </div>
   );
