@@ -195,6 +195,7 @@ const NewChatBox: FC<NewChatBoxProps> = () => {
                     className="whitespace-pre-wrap py-4 px-[14px] rounded-lg bg-slate-600 text-white text-start mr-10 w-fit"
                     text={message.text.replace("[write]:", "")}
                     shouldStop={stopTypingAnimation}
+                    duration={50}
                   />
                 ) : (
                   <div className="flex justify-end">
